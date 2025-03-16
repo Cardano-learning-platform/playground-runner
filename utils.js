@@ -1,6 +1,11 @@
-const path = require('path');
-const { spawn } = require('child_process');
-const fs = require('fs/promises');
+import fs from 'fs/promises'
+import { spawn } from 'child_process'
+import path from 'path'
+import EventEmitter from 'events'
+
+
+const buildEvents = new EventEmitter();
+
 
 function parseGHCError(errorOutput) {
 
@@ -44,6 +49,13 @@ async function copyBuild(timestamp, buildName) {
     const buildDir = path.join(__dirname, 'student-builds', `${buildName}-${timestamp}`);
     console.log(`📂 Copying build to: ${buildDir}`);
 
+    buildEvents.emit('update', {
+        buildId: timestamp,
+        status: 'preparing',
+        message: 'Copying build files...',
+        progress: 10
+    });
+
     await fs.cp(
         path.join(__dirname, 'cached-builds', buildName),
         buildDir,
@@ -51,11 +63,25 @@ async function copyBuild(timestamp, buildName) {
     );
 
     console.log('✅ Build copied successfully');
+    buildEvents.emit('update', {
+        buildId: timestamp,
+        status: 'preparing',
+        message: 'Build files prepared',
+        progress: 20
+    });
     return buildDir;
 }
 async function runBuild(buildDir) {
     return new Promise((resolve, reject) => {
         console.log('🔨 Starting cabal build');
+
+        buildEvents.emit('update', {
+            buildId: timestamp,
+            status: 'building',
+            message: 'Starting build process...',
+            progress: 30
+        });
+
         const build = spawn('cabal', ['build', 'all'], {
             cwd: buildDir
         });
@@ -67,16 +93,36 @@ async function runBuild(buildDir) {
             const output = data.toString();
             buildOutput += output;
             console.log('📝 [Build Output]:', output);
+            buildEvents.emit('update', {
+                buildId: timestamp,
+                status: 'building',
+                message: 'Building...',
+                progress: 50,
+                outputLine: output
+            });
         });
 
         build.stderr.on('data', data => {
             const error = data.toString();
             buildError += error;
             console.error('⚠️ [Build Error]:', error);
+            buildEvents.emit('update', {
+                buildId: timestamp,
+                status: 'building',
+                message: 'Building with warnings/errors...',
+                progress: 50,
+                errorLine: error
+            });
         });
 
         build.on('close', code => {
             console.log(`Build process exited with code ${code}`);
+            buildEvents.emit('update', {
+                buildId: timestamp,
+                status: 'completed',
+                message: 'Build completed successfully',
+                progress: 100
+            });
             if (code === 0) {
                 resolve({
                     success: true,
@@ -84,6 +130,13 @@ async function runBuild(buildDir) {
                 });
             } else {
                 const parsedError = parseGHCError(buildError);
+                buildEvents.emit('update', {
+                    buildId: timestamp,
+                    status: 'failed',
+                    message: 'Build failed',
+                    progress: 100,
+                    error: parsedError
+                });
                 resolve({
                     success: false,
                     error: 'Build failed',
@@ -95,8 +148,9 @@ async function runBuild(buildDir) {
     });
 }
 
-module.exports = {
+export {
     parseGHCError,
     copyBuild,
-    runBuild
+    runBuild,
+    buildEvents
 };
