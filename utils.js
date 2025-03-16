@@ -3,9 +3,7 @@ import { spawn } from 'child_process'
 import path from 'path'
 import EventEmitter from 'events'
 
-
 const buildEvents = new EventEmitter();
-
 
 function parseGHCError(errorOutput) {
 
@@ -50,7 +48,7 @@ async function copyBuild(timestamp, buildName) {
     console.log(`📂 Copying build to: ${buildDir}`);
 
     buildEvents.emit('update', {
-        buildId: timestamp,
+        timestamp,
         status: 'preparing',
         message: 'Copying build files...',
         progress: 10
@@ -64,19 +62,19 @@ async function copyBuild(timestamp, buildName) {
 
     console.log('✅ Build copied successfully');
     buildEvents.emit('update', {
-        buildId: timestamp,
+        timestamp,
         status: 'preparing',
         message: 'Build files prepared',
         progress: 20
     });
     return buildDir;
 }
-async function runBuild(buildDir) {
+async function runBuild(buildDir, timestamp) {
     return new Promise((resolve, reject) => {
         console.log('🔨 Starting cabal build');
 
         buildEvents.emit('update', {
-            buildId: timestamp,
+            timestamp,
             status: 'building',
             message: 'Starting build process...',
             progress: 30
@@ -94,7 +92,7 @@ async function runBuild(buildDir) {
             buildOutput += output;
             console.log('📝 [Build Output]:', output);
             buildEvents.emit('update', {
-                buildId: timestamp,
+                timestamp,
                 status: 'building',
                 message: 'Building...',
                 progress: 50,
@@ -107,7 +105,7 @@ async function runBuild(buildDir) {
             buildError += error;
             console.error('⚠️ [Build Error]:', error);
             buildEvents.emit('update', {
-                buildId: timestamp,
+                timestamp,
                 status: 'building',
                 message: 'Building with warnings/errors...',
                 progress: 50,
@@ -118,7 +116,7 @@ async function runBuild(buildDir) {
         build.on('close', code => {
             console.log(`Build process exited with code ${code}`);
             buildEvents.emit('update', {
-                buildId: timestamp,
+                timestamp,
                 status: 'completed',
                 message: 'Build completed successfully',
                 progress: 100
@@ -131,7 +129,7 @@ async function runBuild(buildDir) {
             } else {
                 const parsedError = parseGHCError(buildError);
                 buildEvents.emit('update', {
-                    buildId: timestamp,
+                    timestamp,
                     status: 'failed',
                     message: 'Build failed',
                     progress: 100,
